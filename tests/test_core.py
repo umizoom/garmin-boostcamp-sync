@@ -129,6 +129,7 @@ def test_normalize_real_boostcamp_shape():
                 {
                     "id": "DvChH9zKFEnSEDEQ",
                     "title": "Week 1 · Day 1",
+                    "name": "GZCL Program (GZCLP)",
                     "finished_at": "2026-10-14 19:11:28",
                     "records": [
                         {
@@ -158,12 +159,22 @@ def test_normalize_real_boostcamp_shape():
     }
     (w,) = boostcamp.normalize(profile, history, TZ, since=date(2026, 10, 1))
     assert w.key == "DvChH9zKFEnSEDEQ"
+    assert w.garmin_name == "GZCLP · Week 1 · Day 1"
     assert w.anchor == datetime(2026, 10, 14, 19, 11, 28, tzinfo=TZ)
     squat, pullup, plank = w.exercises
     assert squat.equipment == "Barbell"
     assert [(s.reps, s.weight_kg) for s in squat.sets] == [(3, 70.307), (5, 70.0)]
     assert [(s.reps, s.weight_kg) for s in pullup.sets] == [(5, 9.072)]
     assert plank.sets[0].reps is None and plank.sets[0].duration_s == 60 and plank.sets[0].weight_kg is None
+
+
+def test_short_program_name():
+    assert boostcamp.short_program_name("GZCL Program (GZCLP)") == "GZCLP"
+    assert boostcamp.short_program_name("5/3/1 for Beginners") == "5/3/1 for Beginners"
+
+
+def test_garmin_name_without_program():
+    assert _workout("k", date(2026, 10, 14)).garmin_name == "Day A"
 
 
 def test_match_uses_finished_at():
@@ -242,3 +253,20 @@ def test_put_skips_known_rejected_without_probing():
     body = _body(("SQUAT", "SQUAT"), ("BENCH_PRESS", "BENCH_PRESS"))
     assert garmin.put_exercise_sets(api, 1, body, {"SQUAT/SQUAT"}) == set()
     assert len(api.calls) == 1
+
+
+# --- config -----------------------------------------------------------------
+
+def test_rename_activities_default_and_overrides(tmp_path, monkeypatch):
+    from gbsync.config import load_config
+
+    monkeypatch.delenv("GBSYNC_RENAME_ACTIVITIES", raising=False)
+    cfg_file = tmp_path / "credentials.toml"
+    cfg_file.write_text(f'[sync]\ndata_dir = "{tmp_path / "data"}"\n')
+    assert load_config(cfg_file).rename_activities is True
+
+    cfg_file.write_text(cfg_file.read_text() + "rename_activities = false\n")
+    assert load_config(cfg_file).rename_activities is False
+
+    monkeypatch.setenv("GBSYNC_RENAME_ACTIVITIES", "true")
+    assert load_config(cfg_file).rename_activities is True

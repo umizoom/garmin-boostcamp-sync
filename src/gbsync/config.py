@@ -22,6 +22,7 @@ class Config:
     match_window_minutes: int
     mfa_wait_minutes: int
     exercise_map_path: Path
+    rename_activities: bool
 
     @property
     def garmin_token_dir(self) -> Path:
@@ -84,4 +85,12 @@ def load_config(path: str | Path | None = None) -> Config:
         exercise_map_path=Path(
             os.getenv("GBSYNC_EXERCISE_MAP", sync.get("exercise_map", "exercise_map.toml"))
         ),
+        rename_activities=_bool(pick("GBSYNC_RENAME_ACTIVITIES", sync, "rename_activities", True)),
     )
+
+
+def _bool(value) -> bool:
+    # TOML gives a real bool; env vars give strings.
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("1", "true", "yes", "on")

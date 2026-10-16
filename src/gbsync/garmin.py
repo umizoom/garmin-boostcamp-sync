@@ -162,6 +162,10 @@ def backup_exercise_sets(api: Garmin, activity_id: int, backup_dir: Path) -> Non
     log.info("Backed up original Garmin sets to %s", path)
 
 
+def set_activity_name(api: Garmin, activity_id: int, name: str) -> None:
+    api.set_activity_name(activity_id, name)
+
+
 def _is_bad_subcategory(e: Exception) -> bool:
     return "Invalid Sub-Category" in str(e)
 

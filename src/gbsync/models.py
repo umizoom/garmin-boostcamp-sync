@@ -36,6 +36,12 @@ class Workout:
         minutes after the watch activity starts, so either end is close enough."""
         return self.start or self.end
     exercises: list[Exercise] = field(default_factory=list)
+    program: str | None = None  # e.g. "GZCLP"
+
+    @property
+    def garmin_name(self) -> str:
+        """Activity name to set on Garmin, e.g. "GZCLP · Week 1 · Day 1"."""
+        return f"{self.program} · {self.title}" if self.program else self.title
 
     def content_hash(self) -> str:
         body = json.dumps([asdict(e) for e in self.exercises], sort_keys=True)
