@@ -31,7 +31,7 @@ def build(workout: Workout, activity: GarminActivity, mapper: ExerciseMapper) ->
         step = activity.duration_s / total
 
     for ex in workout.exercises:
-        category, name = mapper.lookup(ex.name)
+        category, name = mapper.lookup(ex.name, ex.equipment)
         for s in ex.sets:
             active = s.duration_s or DEFAULT_SET_SECONDS
             sets.append(

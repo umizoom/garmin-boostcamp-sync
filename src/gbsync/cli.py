@@ -62,7 +62,12 @@ def run_sync(cfg: Config, *, days: int, dry_run: bool, force: bool, interactive:
             log.info("DRY RUN would write %d set(s): %s", len(body["exerciseSets"]), label)
             print(json.dumps(body, indent=2))
             continue
-        garmin.put_exercise_sets(api, a.activity_id, body)
+        garmin.backup_exercise_sets(api, a.activity_id, cfg.backups_dir)
+        if new_bad := garmin.put_exercise_sets(api, a.activity_id, body, state.rejected_names):
+            state.add_rejected(new_bad)
+            log.warning(
+                "Remember to remap these in exercise_map.toml: %s", ", ".join(sorted(new_bad))
+            )
         state.record(w.key, a.activity_id, h)
         state.save()
         written += 1

@@ -19,6 +19,7 @@ class WorkoutSet:
 class Exercise:
     name: str
     sets: list[WorkoutSet] = field(default_factory=list)
+    equipment: str | None = None  # e.g. "Barbell", "Dumbbell"
 
 
 @dataclass
@@ -28,6 +29,12 @@ class Workout:
     title: str
     start: datetime | None  # tz-aware when known
     end: datetime | None
+
+    @property
+    def anchor(self) -> datetime | None:
+        """Time used to match against Garmin. Boostcamp's finished_at lands a few
+        minutes after the watch activity starts, so either end is close enough."""
+        return self.start or self.end
     exercises: list[Exercise] = field(default_factory=list)
 
     def content_hash(self) -> str:

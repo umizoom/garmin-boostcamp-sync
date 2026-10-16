@@ -107,33 +107,81 @@ def test_payload_shape_and_units():
 
 # --- boostcamp normalization ------------------------------------------------
 
-def test_normalize_converts_lb_and_skips_incomplete():
-    profile = {"data": {"preference": {"weightUnit": "lb"}}}
+def _bc_set(value, amount, unit="lbs", **extra):
+    # Trimmed from a real Boostcamp /programs/history set.
+    return {
+        "value": value,
+        "amount": amount,
+        "weight_unit": unit,
+        "skipped": False,
+        "valueEmpty": False,
+        "amountEmpty": False,
+        "target_type": "reps",
+        **extra,
+    }
+
+
+def test_normalize_real_boostcamp_shape():
+    profile = {"data": {"preference": {"weightUnit": "lbs"}}}
     history = {
         "data": {
             "2026-10-14": [
                 {
-                    "title": "Day A",
+                    "id": "DvChH9zKFEnSEDEQ",
+                    "title": "Week 1 · Day 1",
+                    "finished_at": "2026-10-14 19:11:28",
                     "records": [
                         {
-                            "name": "Bench Press",
+                            "name": "Squat (T1)",
+                            "type": "Barbell",
                             "sets": [
-                                {"reps": 5, "weight": 225, "completed": True},
-                                {"reps": 5, "weight": 225, "completed": False},
+                                _bc_set("155", "3", archived_weight=155, archived_reps=3),
+                                _bc_set("155", "3", skipped=True),
+                                _bc_set("70", "5", unit="kg"),
                             ],
-                        }
+                        },
+                        {
+                            # AMRAP set: amount is the target "15+", value left blank;
+                            # archived_* hold what was actually done.
+                            "name": "Pull-Up (Weighted)",
+                            "type": "Bodyweight",
+                            "sets": [
+                                _bc_set("", "15+", target_type="reps_max", archived_weight=20, archived_reps=5),
+                            ],
+                        },
+                        {"name": "Plank", "type": "Bodyweight", "sets": [_bc_set("", "60", valueEmpty=True, target_type="time")]},
                     ],
                 }
             ],
-            "2026-09-01": [{"title": "Old", "records": [{"name": "X", "sets": [{"reps": 1}]}]}],
+            "2026-09-01": [{"title": "Old", "records": [{"name": "X", "sets": [_bc_set("1", "1")]}]}],
         }
     }
-    out = boostcamp.normalize(profile, history, TZ, since=date(2026, 10, 1))
-    assert len(out) == 1
-    (ex,) = out[0].exercises
-    assert len(ex.sets) == 1
-    assert ex.sets[0].reps == 5
-    assert abs(ex.sets[0].weight_kg - 102.058) < 0.01
+    (w,) = boostcamp.normalize(profile, history, TZ, since=date(2026, 10, 1))
+    assert w.key == "DvChH9zKFEnSEDEQ"
+    assert w.anchor == datetime(2026, 10, 14, 19, 11, 28, tzinfo=TZ)
+    squat, pullup, plank = w.exercises
+    assert squat.equipment == "Barbell"
+    assert [(s.reps, s.weight_kg) for s in squat.sets] == [(3, 70.307), (5, 70.0)]
+    assert [(s.reps, s.weight_kg) for s in pullup.sets] == [(5, 9.072)]
+    assert plank.sets[0].reps is None and plank.sets[0].duration_s == 60 and plank.sets[0].weight_kg is None
+
+
+def test_match_uses_finished_at():
+    # Real data: Boostcamp finished_at lands a few minutes after the watch starts.
+    w = _workout("w1", date(2026, 10, 14))
+    w.end = datetime(2026, 10, 14, 19, 11, 28, tzinfo=TZ)
+    other = _act(1, datetime(2026, 10, 14, 13, 0, tzinfo=UTC))
+    right = _act(2, datetime(2026, 10, 14, 23, 3, 57, tzinfo=UTC))  # 19:03:57 local
+    pairs = matcher.match([w], [other, right], TZ, 120)
+    assert [(p[0].key, p[1].activity_id) for p in pairs] == [("w1", 2)]
+
+
+def test_gzclp_names_with_equipment():
+    m = ExerciseMapper(ROOT / "exercise_map.toml")
+    assert m.lookup("Squat (T1)", "Barbell") == ("SQUAT", "BARBELL_BACK_SQUAT")
+    assert m.lookup("Bench Press (T2)", "Barbell") == ("BENCH_PRESS", "BARBELL_BENCH_PRESS")
+    assert m.lookup("Pull-Up (Weighted)", "Bodyweight") == ("PULL_UP", "WEIGHTED_PULL_UP")
+    assert m.lookup("Dumbbell Row (T3)", "Dumbbell") == ("ROW", "DUMBBELL_ROW")
 
 
 # --- state ------------------------------------------------------------------
@@ -146,3 +194,48 @@ def test_state_roundtrip(tmp_path):
     assert s2.is_current("w1", 42, "abc")
     assert not s2.is_current("w1", 42, "changed")
     assert not s2.is_current("w1", 43, "abc")
+
+
+# --- garmin write fallback --------------------------------------------------
+
+class _FakeGarmin:
+    """Rejects any payload containing a name in `bad`, like Garmin's 400."""
+
+    def __init__(self, bad):
+        self.bad = bad
+        self.calls = []
+
+    def set_activity_exercise_sets(self, activity_id, body):
+        from garminconnect import GarminConnectConnectionError
+
+        self.calls.append(body)
+        names = {f"{e['category']}/{e['name']}" for s in body["exerciseSets"] for e in s["exercises"]}
+        if names & self.bad:
+            raise GarminConnectConnectionError("API Error 400 - Invalid Sub-Category Passed in the request")
+
+
+def _body(*pairs):
+    return {
+        "activityId": 1,
+        "exerciseSets": [{"exercises": [{"category": c, "name": n}]} for c, n in pairs],
+    }
+
+
+def test_put_finds_and_nulls_rejected_name():
+    from gbsync import garmin
+
+    api = _FakeGarmin(bad={"SQUAT/SQUAT"})
+    body = _body(("SQUAT", "SQUAT"), ("BENCH_PRESS", "BENCH_PRESS"))
+    assert garmin.put_exercise_sets(api, 1, body, set()) == {"SQUAT/SQUAT"}
+    final = api.calls[-1]["exerciseSets"]
+    assert final[0]["exercises"][0]["name"] is None
+    assert final[1]["exercises"][0]["name"] == "BENCH_PRESS"
+
+
+def test_put_skips_known_rejected_without_probing():
+    from gbsync import garmin
+
+    api = _FakeGarmin(bad={"SQUAT/SQUAT"})
+    body = _body(("SQUAT", "SQUAT"), ("BENCH_PRESS", "BENCH_PRESS"))
+    assert garmin.put_exercise_sets(api, 1, body, {"SQUAT/SQUAT"}) == set()
+    assert len(api.calls) == 1

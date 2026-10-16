@@ -69,13 +69,34 @@ for _e in catalog.EXERCISES:
     _CATALOG_BY_NORM.setdefault(_norm(_e["name"]), (_e["category"], _e["exercise"]))
 
 
-def _bc_variants(name: str) -> list[str]:
-    """Boostcamp style "Bench Press (Barbell)" -> try "Barbell Bench Press" first,
-    since the plain name would otherwise match the generic catalog entry."""
-    m = re.match(r"^(.*?)\s*\((.+)\)\s*$", name)
-    if m:
-        return [f"{m.group(2)} {m.group(1)}", name]
-    return [name]
+_TIER_TAG = re.compile(r"\s*\(T\d\)\s*", re.IGNORECASE)  # GZCLP "Squat (T1)"
+_PAREN = re.compile(r"^(.*?)\s*\((.+)\)\s*$")
+
+
+def _strip_tier(name: str) -> str:
+    return _TIER_TAG.sub(" ", name).strip()
+
+
+def _bc_variants(name: str, equipment: str | None = None) -> list[str]:
+    """Catalog names to try for a Boostcamp exercise, most specific first.
+
+    "Pull-Up (Weighted)" -> "Weighted Pull-Up"; equipment "Barbell" turns
+    "Bench Press" into "Barbell Bench Press". The plain name comes last so it
+    doesn't win over the specific entry.
+    """
+    base = _strip_tier(name)
+    paren = None
+    if m := _PAREN.match(base):
+        paren = f"{m.group(2)} {m.group(1)}"
+    equip = equipment.strip() if equipment else None
+    out = []
+    for cand in (paren, base):
+        if not cand:
+            continue
+        if equip and equip.lower() not in cand.lower():
+            out.append(f"{equip} {cand}")
+        out.append(cand)
+    return out
 
 
 class ExerciseMapper:
@@ -87,10 +108,11 @@ class ExerciseMapper:
                     self.overrides[k.strip().lower()] = (v[0], v[1] or None)
         self.unmapped: set[str] = set()
 
-    def lookup(self, name: str) -> tuple[str, str | None]:
-        if hit := self.overrides.get(name.strip().lower()):
-            return hit
-        for variant in _bc_variants(name):
+    def lookup(self, name: str, equipment: str | None = None) -> tuple[str, str | None]:
+        for key in (name, _strip_tier(name)):
+            if hit := self.overrides.get(key.strip().lower()):
+                return hit
+        for variant in _bc_variants(name, equipment):
             if entry := catalog.resolve(variant):
                 return entry["category"], entry["exercise"] or None
             if hit := _CATALOG_BY_NORM.get(_norm(variant)):
