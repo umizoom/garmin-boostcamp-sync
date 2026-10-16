@@ -15,3 +15,5 @@
 "Overhead Press" = ["SHOULDER_PRESS", "OVERHEAD_BARBELL_PRESS"]
 "Barbell Row" = ["ROW", "BARBELL_ROW"]
 "Lat Pulldown" = ["PULL_UP", "LAT_PULLDOWN"]
+# Garmin has no plain dead hang; category only.
+"Dead Hang" = ["PULL_UP", ""]
