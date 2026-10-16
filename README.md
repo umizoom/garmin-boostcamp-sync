@@ -55,14 +55,27 @@ normally only needed once. Two ways to provide it:
 
 ## Deploy (Docker)
 
+CI (`.github/workflows/build-and-push.yml`) builds the image on every PR and
+pushes `ghcr.io/umizoom/garmin-boostcamp-sync` (tags `latest` and the short
+commit SHA) on merge to `main`. The package is private, so log the server in
+once with a GitHub token that has `read:packages`:
+
+```sh
+echo <token> | docker login ghcr.io -u umizoom --password-stdin
+```
+
+Then:
+
 ```sh
 cp credentials.example.toml credentials.toml   # fill in
 mkdir -p data && sudo chown 1000:1000 data      # container runs as uid 1000
-docker compose build
+docker compose pull                            # or `docker compose build` to build locally
 docker compose run --rm sync login             # one-time MFA
 docker compose up -d
 docker compose logs -f
 ```
+
+To update: `docker compose pull && docker compose up -d`.
 
 ## Exercise mapping
 

@@ -1,7 +1,7 @@
 services:
   sync:
     build: .
-    image: garmin-boostcamp-sync:latest
+    image: ghcr.io/umizoom/garmin-boostcamp-sync:latest # published by CI on merge to main
     command: daemon
     restart: unless-stopped
     stdin_open: true # lets `docker compose run --rm sync login` prompt for the MFA code
