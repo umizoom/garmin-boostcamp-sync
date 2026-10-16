@@ -1,0 +1,23 @@
+# Secrets — never commit
+credentials.toml
+.env
+*.pickle
+.boostcamp/
+
+# Runtime state: tokens, sync state, MFA handoff files, raw API dumps
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
