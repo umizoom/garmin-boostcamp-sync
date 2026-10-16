@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -132,12 +133,20 @@ def _normalize_set(s: dict, default_unit: str) -> WorkoutSet | None:
     )
 
 
+def short_program_name(name: str) -> str:
+    """Use a trailing bracketed abbreviation if there is one:
+    "GZCL Program (GZCLP)" -> "GZCLP". Otherwise the name as given."""
+    m = re.search(r"\(([^()]+)\)\s*$", name)
+    return m.group(1).strip() if m else name.strip()
+
+
 def normalize(
     profile: dict[str, Any], history: dict[str, Any], tz: ZoneInfo, since: date
 ) -> list[Workout]:
     """history["data"] is {"YYYY-MM-DD": [workout, ...]}. Each workout has
-    `id`, `title`, `finished_at` (local time, no zone) and `records`, one per
-    exercise with `name`, `type` (equipment, e.g. "Barbell") and `sets`."""
+    `id`, `title`, `name` (the program), `finished_at` (local time, no zone)
+    and `records`, one per exercise with `name`, `type` (equipment, e.g.
+    "Barbell") and `sets`."""
     default_unit = weight_unit(profile)
     out: list[Workout] = []
     for day_str, workouts in sorted((history.get("data") or {}).items()):
@@ -149,7 +158,10 @@ def normalize(
         if day < since:
             continue
         for idx, w in enumerate(workouts or []):
-            title = w.get("title") or w.get("name") or "Workout"
+            title = w.get("title")
+            program = w.get("name")
+            if not title:
+                title, program = program or "Workout", None
             exercises = []
             for rec in w.get("records") or []:
                 sets = [ws for s in rec.get("sets") or [] if (ws := _normalize_set(s, default_unit))]
@@ -167,6 +179,7 @@ def normalize(
                     start=None,
                     end=_parse_ts(w.get("finished_at"), tz),
                     exercises=exercises,
+                    program=short_program_name(str(program)) if program else None,
                 )
             )
     return out

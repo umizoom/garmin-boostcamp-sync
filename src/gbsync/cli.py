@@ -51,12 +51,21 @@ def run_sync(cfg: Config, *, days: int, dry_run: bool, force: bool, interactive:
 
     mapper = ExerciseMapper(cfg.exercise_map_path)
     state = State(cfg.state_path)
-    written = 0
+    written = renamed = 0
     for w, a in pairs:
         # Include the chosen Garmin exercises so a mapping fix re-sends the activity.
         mapped = [mapper.lookup(e.name, e.equipment) for e in w.exercises]
         h = hashlib.sha256(f"{w.content_hash()}|{mapped}".encode()).hexdigest()[:16]
         label = f"{w.local_date} {w.title!r} -> Garmin {a.activity_id} ({a.name!r})"
+        # Checked apart from the sets hash so activities synced before renaming
+        # existed still get renamed. a.name is fresh each run, so this settles.
+        if cfg.rename_activities and a.name != w.garmin_name:
+            if dry_run:
+                log.info("DRY RUN would rename Garmin %d %r -> %r", a.activity_id, a.name, w.garmin_name)
+            else:
+                garmin.set_activity_name(api, a.activity_id, w.garmin_name)
+                renamed += 1
+                log.info("Renamed Garmin %d %r -> %r", a.activity_id, a.name, w.garmin_name)
         if not force and state.is_current(w.key, a.activity_id, h):
             log.info("Up to date: %s", label)
             continue
@@ -78,7 +87,7 @@ def run_sync(cfg: Config, *, days: int, dry_run: bool, force: bool, interactive:
 
     if mapper.unmapped:
         log.warning("Unmapped exercises (add to exercise_map.toml): %s", sorted(mapper.unmapped))
-    log.info("Sync done: %d activit(y/ies) updated", written)
+    log.info("Sync done: %d activit(y/ies) updated, %d renamed", written, renamed)
     return 0
 
 
