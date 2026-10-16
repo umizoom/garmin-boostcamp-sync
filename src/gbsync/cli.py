@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import signal
@@ -52,7 +53,9 @@ def run_sync(cfg: Config, *, days: int, dry_run: bool, force: bool, interactive:
     state = State(cfg.state_path)
     written = 0
     for w, a in pairs:
-        h = w.content_hash()
+        # Include the chosen Garmin exercises so a mapping fix re-sends the activity.
+        mapped = [mapper.lookup(e.name, e.equipment) for e in w.exercises]
+        h = hashlib.sha256(f"{w.content_hash()}|{mapped}".encode()).hexdigest()[:16]
         label = f"{w.local_date} {w.title!r} -> Garmin {a.activity_id} ({a.name!r})"
         if not force and state.is_current(w.key, a.activity_id, h):
             log.info("Up to date: %s", label)

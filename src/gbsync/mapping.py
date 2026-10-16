@@ -60,6 +60,7 @@ def _norm(name: str) -> str:
     s = name.lower()
     s = re.sub(r"\(.*?\)", " ", s)  # drop "(Barbell)" style suffixes
     s = re.sub(r"[^a-z0-9]+", " ", s)
+    s = re.sub(r"\bbodyweight\b", "body weight", s)  # Garmin: "Body-weight Dip"
     s = re.sub(r"\b(\w+?)s\b", r"\1", s)  # crude singular
     return " ".join(s.split())
 
@@ -81,8 +82,8 @@ def _bc_variants(name: str, equipment: str | None = None) -> list[str]:
     """Catalog names to try for a Boostcamp exercise, most specific first.
 
     "Pull-Up (Weighted)" -> "Weighted Pull-Up"; equipment "Barbell" turns
-    "Bench Press" into "Barbell Bench Press". The plain name comes last so it
-    doesn't win over the specific entry.
+    "Bench Press" into "Barbell Bench Press" (or "... with Barbell"). The plain
+    name comes last so it doesn't win over the specific entry.
     """
     base = _strip_tier(name)
     paren = None
@@ -95,6 +96,7 @@ def _bc_variants(name: str, equipment: str | None = None) -> list[str]:
             continue
         if equip and equip.lower() not in cand.lower():
             out.append(f"{equip} {cand}")
+            out.append(f"{cand} with {equip}")  # Garmin: "Bent-over Row with Dumbbell"
         out.append(cand)
     return out
 
