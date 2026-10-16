@@ -182,6 +182,9 @@ def test_gzclp_names_with_equipment():
     assert m.lookup("Bench Press (T2)", "Barbell") == ("BENCH_PRESS", "BARBELL_BENCH_PRESS")
     assert m.lookup("Pull-Up (Weighted)", "Bodyweight") == ("PULL_UP", "WEIGHTED_PULL_UP")
     assert m.lookup("Dumbbell Row (T3)", "Dumbbell") == ("ROW", "DUMBBELL_ROW")
+    assert m.lookup("Dip (Bodyweight)", "Bodyweight") == ("TRICEPS_EXTENSION", "BODY_WEIGHT_DIP")
+    assert m.lookup("Bent Over Row (T3)", "Dumbbell") == ("ROW", "BENT_OVER_ROW_WITH_DUMBELL")
+    assert m.unmapped == set()
 
 
 # --- state ------------------------------------------------------------------
