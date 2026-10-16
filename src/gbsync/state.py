@@ -15,6 +15,15 @@ class State:
         except (FileNotFoundError, json.JSONDecodeError):
             self.data = {}
         self.data.setdefault("synced", {})
+        self.data.setdefault("rejected_names", [])
+
+    @property
+    def rejected_names(self) -> set[str]:
+        """Exercise names ("CATEGORY/NAME") Garmin refused for activity sets."""
+        return set(self.data["rejected_names"])
+
+    def add_rejected(self, names: set[str]) -> None:
+        self.data["rejected_names"] = sorted(self.rejected_names | names)
 
     def is_current(self, workout_key: str, activity_id: int, content_hash: str) -> bool:
         rec = self.data["synced"].get(workout_key)

@@ -14,3 +14,4 @@
 "Deadlift" = ["DEADLIFT", "BARBELL_DEADLIFT"]
 "Overhead Press" = ["SHOULDER_PRESS", "OVERHEAD_BARBELL_PRESS"]
 "Barbell Row" = ["ROW", "BARBELL_ROW"]
+"Lat Pulldown" = ["PULL_UP", "LAT_PULLDOWN"]

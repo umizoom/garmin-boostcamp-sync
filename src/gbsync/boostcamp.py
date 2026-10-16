@@ -1,9 +1,4 @@
-"""Boostcamp: login with a JSON token cache, fetch history, normalize to models.
-
-The Boostcamp history payload is undocumented. Field names below are the
-candidates we look for; confirm them against a real dump (`gbsync dump`) and
-tighten as needed.
-"""
+"""Boostcamp: login with a JSON token cache, fetch history, normalize to models."""
 
 from __future__ import annotations
 
@@ -77,13 +72,6 @@ def fetch_raw(cfg: Config) -> tuple[dict[str, Any], dict[str, Any]]:
 
 # --- normalization ----------------------------------------------------------
 
-def _first(d: dict, *keys: str) -> Any:
-    for k in keys:
-        if k in d and d[k] not in (None, ""):
-            return d[k]
-    return None
-
-
 def _num(v: Any) -> float | None:
     try:
         return float(v)
@@ -105,39 +93,52 @@ def _parse_ts(v: Any, tz: ZoneInfo) -> datetime | None:
 
 
 def weight_unit(profile: dict[str, Any]) -> str:
+    """Account default, used when a set doesn't carry its own weight_unit."""
     pref = ((profile.get("data") or {}).get("preference") or {})
-    unit = str(pref.get("weightUnit") or "lb").lower()
-    return "kg" if unit.startswith("kg") else "lb"
+    return _unit(pref.get("weightUnit"))
 
 
-def _set_completed(s: dict) -> bool:
-    for k in ("completed", "is_completed", "isCompleted", "done", "checked"):
-        if k in s:
-            return bool(s[k])
-    return True  # no flag present: assume it was logged because it was done
+def _unit(raw: Any, default: str = "lb") -> str:
+    if not raw:
+        return default
+    return "kg" if str(raw).lower().startswith("kg") else "lb"
 
 
-def _normalize_set(s: dict, unit: str) -> WorkoutSet | None:
-    if not _set_completed(s):
+def _logged(s: dict, archived: str, entered: str, empty_flag: str) -> float | None:
+    """What was actually done. `archived_*` holds the logged result; `value`/
+    `amount` are the prescription or in-app entry ("3+" on AMRAP sets, "" when
+    left blank), so they're only a fallback."""
+    if (v := _num(s.get(archived))) is not None:
+        return v
+    return None if s.get(empty_flag) else _num(s.get(entered))
+
+
+def _normalize_set(s: dict, default_unit: str) -> WorkoutSet | None:
+    """One Boostcamp set: weight in the set's `weight_unit`; reps, or seconds
+    when `target_type` is "time"."""
+    if s.get("skipped"):
         return None
-    reps = _num(_first(s, "reps", "rep", "repetitions", "value"))
-    weight = _num(_first(s, "weight", "load", "kg", "lbs"))
-    if weight is not None and unit == "lb":
+    amount = _logged(s, "archived_reps", "amount", "amountEmpty")
+    weight = _logged(s, "archived_weight", "value", "valueEmpty")
+    if amount is None and weight is None:
+        return None
+    if weight is not None and _unit(s.get("weight_unit"), default_unit) == "lb":
         weight *= LB_TO_KG
-    duration = _num(_first(s, "duration", "time", "seconds"))
-    if reps is None and weight is None and duration is None:
-        return None
+    timed = s.get("target_type") == "time"
     return WorkoutSet(
-        reps=int(reps) if reps is not None else None,
-        weight_kg=round(weight, 3) if weight is not None else None,
-        duration_s=duration,
+        reps=None if timed or amount is None else int(amount),
+        weight_kg=round(weight, 3) if weight else None,
+        duration_s=amount if timed else None,
     )
 
 
 def normalize(
     profile: dict[str, Any], history: dict[str, Any], tz: ZoneInfo, since: date
 ) -> list[Workout]:
-    unit = weight_unit(profile)
+    """history["data"] is {"YYYY-MM-DD": [workout, ...]}. Each workout has
+    `id`, `title`, `finished_at` (local time, no zone) and `records`, one per
+    exercise with `name`, `type` (equipment, e.g. "Barbell") and `sets`."""
+    default_unit = weight_unit(profile)
     out: list[Workout] = []
     for day_str, workouts in sorted((history.get("data") or {}).items()):
         try:
@@ -148,24 +149,23 @@ def normalize(
         if day < since:
             continue
         for idx, w in enumerate(workouts or []):
-            title = _first(w, "title", "name") or "Workout"
+            title = w.get("title") or w.get("name") or "Workout"
             exercises = []
             for rec in w.get("records") or []:
-                sets = [ws for s in rec.get("sets") or [] if (ws := _normalize_set(s, unit))]
+                sets = [ws for s in rec.get("sets") or [] if (ws := _normalize_set(s, default_unit))]
                 if sets:
-                    exercises.append(Exercise(name=str(_first(rec, "name", "title")), sets=sets))
+                    exercises.append(
+                        Exercise(name=str(rec.get("name")), sets=sets, equipment=rec.get("type") or None)
+                    )
             if not exercises:
                 continue
-            wid = _first(w, "id", "_id", "history_id", "workout_id")
             out.append(
                 Workout(
-                    key=str(wid) if wid is not None else f"{day.isoformat()}#{idx}:{title}",
+                    key=str(w.get("id") or f"{day.isoformat()}#{idx}:{title}"),
                     local_date=day,
                     title=str(title),
-                    start=_parse_ts(_first(w, "start_time", "started_at", "startTime", "start"), tz),
-                    end=_parse_ts(
-                        _first(w, "end_time", "finished_at", "endTime", "completed_at", "end"), tz
-                    ),
+                    start=None,
+                    end=_parse_ts(w.get("finished_at"), tz),
                     exercises=exercises,
                 )
             )

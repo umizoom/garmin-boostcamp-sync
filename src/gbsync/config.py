@@ -44,6 +44,10 @@ class Config:
         return self.data_dir / "mfa_pending"
 
     @property
+    def backups_dir(self) -> Path:
+        return self.data_dir / "backups"
+
+    @property
     def dumps_dir(self) -> Path:
         return self.data_dir / "dumps"
 

@@ -17,8 +17,8 @@ def match(
 ) -> list[tuple[Workout, GarminActivity]]:
     """Return (workout, activity) pairs. Each activity is used at most once.
 
-    Workouts with a start time pair with the closest activity within the
-    window. The rest pair by local date, in start-time order.
+    Workouts with a known time pair with the activity whose start is closest,
+    within the window. The rest pair by local date, in start-time order.
     """
     window = timedelta(minutes=window_minutes)
     used: set[int] = set()
@@ -27,10 +27,10 @@ def match(
     # 1) time-based, closest pairs first
     candidates = []
     for w in workouts:
-        if w.start is None:
+        if w.anchor is None:
             continue
         for a in activities:
-            gap = abs(a.start - w.start)
+            gap = abs(a.start - w.anchor)
             if gap <= window:
                 candidates.append((gap, w.key, w, a))
     matched_keys: set[str] = set()
@@ -51,7 +51,7 @@ def match(
 
     pending = defaultdict(list)
     for w in workouts:
-        if w.key not in matched_keys and w.start is None:
+        if w.key not in matched_keys and w.anchor is None:
             pending[w.local_date].append(w)
     for day, ws in pending.items():
         for w, a in zip(ws, by_day.get(day, [])):

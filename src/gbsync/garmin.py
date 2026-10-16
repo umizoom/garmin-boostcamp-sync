@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import copy
+import json
 import logging
 import time
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
-from garminconnect import Garmin, GarminConnectAuthenticationError
+from garminconnect import Garmin, GarminConnectAuthenticationError, GarminConnectConnectionError
 
 from .config import Config
 from .models import GarminActivity
@@ -150,5 +152,64 @@ def get_exercise_sets(api: Garmin, activity_id: int) -> dict[str, Any]:
     return api.get_activity_exercise_sets(activity_id)
 
 
-def put_exercise_sets(api: Garmin, activity_id: int, payload: dict[str, Any]) -> Any:
-    return api.set_activity_exercise_sets(activity_id, payload)
+def backup_exercise_sets(api: Garmin, activity_id: int, backup_dir: Path) -> None:
+    """Save the activity's current sets once, before we first overwrite them."""
+    path = backup_dir / f"{activity_id}.json"
+    if path.exists():
+        return
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(get_exercise_sets(api, activity_id), indent=2))
+    log.info("Backed up original Garmin sets to %s", path)
+
+
+def _is_bad_subcategory(e: Exception) -> bool:
+    return "Invalid Sub-Category" in str(e)
+
+
+def _without_names(payload: dict[str, Any], drop: set[str]) -> dict[str, Any]:
+    """Copy of payload with exercise names in `drop` ("CATEGORY/NAME") nulled."""
+    body = copy.deepcopy(payload)
+    for s in body["exerciseSets"]:
+        for ex in s["exercises"]:
+            if ex.get("name") and f"{ex['category']}/{ex['name']}" in drop:
+                ex["name"] = None
+    return body
+
+
+def put_exercise_sets(
+    api: Garmin, activity_id: int, payload: dict[str, Any], rejected: set[str]
+) -> set[str]:
+    """PUT the sets. Names Garmin refuses ("Invalid Sub-Category") are found by
+    testing them one at a time, then sent category-only. `rejected` holds names
+    already known to fail; returns any newly rejected ones."""
+    try:
+        api.set_activity_exercise_sets(activity_id, _without_names(payload, rejected))
+        return set()
+    except GarminConnectConnectionError as e:
+        if not _is_bad_subcategory(e):
+            raise
+
+    names = sorted(
+        {
+            f"{ex['category']}/{ex['name']}"
+            for s in payload["exerciseSets"]
+            for ex in s["exercises"]
+            if ex.get("name")
+        }
+        - rejected
+    )
+    log.warning("Garmin rejected an exercise name; testing %d name(s) individually", len(names))
+    new_bad: set[str] = set()
+    for name in names:
+        try:
+            api.set_activity_exercise_sets(
+                activity_id, _without_names(payload, set(names) - {name} | rejected)
+            )
+        except GarminConnectConnectionError as e:
+            if not _is_bad_subcategory(e):
+                raise
+            log.warning("Garmin does not accept %s; sending category only", name)
+            new_bad.add(name)
+
+    api.set_activity_exercise_sets(activity_id, _without_names(payload, rejected | new_bad))
+    return new_bad
