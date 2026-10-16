@@ -1,0 +1,17 @@
+# Boostcamp exercise name -> Garmin exercise.
+# Overrides win over automatic matching. Keys are matched case-insensitively.
+#
+# Value is [category, name]. Use one of the categories/exercise keys from
+# garminconnect/exercises.py. `name` may be "" to set only the category.
+#
+# Run `gbsync sync --dry-run` and check the log for "unmapped exercise" lines
+# to see what needs adding here.
+
+[exercises]
+"Bench Press" = ["BENCH_PRESS", "BARBELL_BENCH_PRESS"]
+"Squat" = ["SQUAT", "BARBELL_BACK_SQUAT"]
+"Back Squat" = ["SQUAT", "BARBELL_BACK_SQUAT"]
+"Deadlift" = ["DEADLIFT", "BARBELL_DEADLIFT"]
+"Overhead Press" = ["SHOULDER_PRESS", "OVERHEAD_BARBELL_PRESS"]
+"Barbell Row" = ["ROW", "BARBELL_ROW"]
+"Lat Pulldown" = ["PULL_UP", "LAT_PULLDOWN"]

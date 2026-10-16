@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "garmin-boostcamp-sync"
+version = "0.1.0"
+description = "Copy Boostcamp workout sets onto the matching Garmin strength activity"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "garminconnect==0.3.18",
+    "boostcampapi @ git+https://github.com/Alex-Keyes/boostcamp-api@17aa647c0c7954054b6b98253d3f8ff0dbc18f0f",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+gbsync = "gbsync.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
