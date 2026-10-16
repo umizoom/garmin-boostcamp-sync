@@ -1,0 +1,12 @@
+services:
+  sync:
+    build: .
+    image: garmin-boostcamp-sync:latest
+    command: daemon
+    restart: unless-stopped
+    stdin_open: true # lets `docker compose run --rm sync login` prompt for the MFA code
+    tty: true
+    volumes:
+      - ./credentials.toml:/app/credentials.toml:ro
+      - ./exercise_map.toml:/app/exercise_map.toml:ro
+      - ./data:/app/data

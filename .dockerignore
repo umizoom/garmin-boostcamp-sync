@@ -1,0 +1,13 @@
+.git
+credentials.toml
+.env
+*.pickle
+.boostcamp/
+data/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+tests/
