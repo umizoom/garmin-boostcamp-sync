@@ -57,6 +57,17 @@ normally only needed once. Two ways to provide it:
    A wrong code is logged and it waits for a new one. If nothing arrives in
    time, the cycle is skipped and it tries again next interval.
 
+## Notifications
+
+Set `discord_webhook` under `[notify]` in `credentials.toml` (or
+`DISCORD_WEBHOOK_URL`) to get a Discord message when:
+
+- Garmin is waiting for an MFA code in `data/mfa_code`, or rejected one
+- a daemon sync cycle fails (including MFA timeouts and Garmin rate limits)
+- an exercise is unmapped (once per name) or Garmin rejects an exercise name
+
+In Discord: channel settings → Integrations → Webhooks → New Webhook → Copy URL.
+
 ## Deploy (Docker)
 
 CI (`.github/workflows/build-and-push.yml`) builds the image on every PR and

@@ -23,6 +23,7 @@ class Config:
     mfa_wait_minutes: int
     exercise_map_path: Path
     rename_activities: bool
+    discord_webhook: str | None
 
     @property
     def garmin_token_dir(self) -> Path:
@@ -63,6 +64,7 @@ def load_config(path: str | Path | None = None) -> Config:
     garmin = raw.get("garmin", {})
     boostcamp = raw.get("boostcamp", {})
     sync = raw.get("sync", {})
+    notify = raw.get("notify", {})
 
     def pick(env: str, section: dict, key: str, default=None):
         return os.getenv(env) or section.get(key, default)
@@ -86,6 +88,7 @@ def load_config(path: str | Path | None = None) -> Config:
             os.getenv("GBSYNC_EXERCISE_MAP", sync.get("exercise_map", "exercise_map.toml"))
         ),
         rename_activities=_bool(pick("GBSYNC_RENAME_ACTIVITIES", sync, "rename_activities", True)),
+        discord_webhook=pick("DISCORD_WEBHOOK_URL", notify, "discord_webhook") or None,
     )
 
 

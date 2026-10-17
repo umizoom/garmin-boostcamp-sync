@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 from garminconnect import GarminConnectTooManyRequestsError
 
-from . import boostcamp, garmin, matcher, payload
+from . import boostcamp, garmin, matcher, notify, payload
 from .config import Config, load_config
 from .mapping import ExerciseMapper
 from .state import State
@@ -80,6 +80,11 @@ def run_sync(cfg: Config, *, days: int, dry_run: bool, force: bool, interactive:
             log.warning(
                 "Remember to remap these in exercise_map.toml: %s", ", ".join(sorted(new_bad))
             )
+            notify.send(
+                cfg,
+                "Garmin rejected these exercise names (sent category only); "
+                f"remap them in exercise_map.toml: {', '.join(sorted(new_bad))}",
+            )
         state.record(w.key, a.activity_id, h)
         state.save()
         written += 1
@@ -87,6 +92,12 @@ def run_sync(cfg: Config, *, days: int, dry_run: bool, force: bool, interactive:
 
     if mapper.unmapped:
         log.warning("Unmapped exercises (add to exercise_map.toml): %s", sorted(mapper.unmapped))
+        # Unmapped names come back every run while the workout is in the
+        # lookback window, so only notify about ones not sent before.
+        if not dry_run and (new := mapper.unmapped - state.unmapped_notified):
+            notify.send(cfg, f"Unmapped exercises (add to exercise_map.toml): {', '.join(sorted(new))}")
+            state.add_unmapped_notified(new)
+            state.save()
     log.info("Sync done: %d activit(y/ies) updated, %d renamed", written, renamed)
     return 0
 
@@ -112,10 +123,13 @@ def cmd_daemon(cfg: Config, args) -> int:
             run_sync(cfg, days=cfg.lookback_days, dry_run=False, force=False, interactive=False)
         except garmin.MfaTimeout as e:
             log.error("%s; will retry next cycle", e)
+            notify.send(cfg, f"{e}; will retry next cycle")
         except GarminConnectTooManyRequestsError:
             log.error("Garmin rate limited (429); will retry next cycle")
-        except Exception:
+            notify.send(cfg, "Garmin rate limited (429); will retry next cycle")
+        except Exception as e:
             log.exception("Sync cycle failed; will retry next cycle")
+            notify.send(cfg, f"Sync failed: {type(e).__name__}: {e}; will retry next cycle")
         stop.wait(cfg.interval_hours * 3600)
     log.info("Daemon stopped")
     return 0

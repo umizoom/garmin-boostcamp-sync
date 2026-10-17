@@ -16,6 +16,7 @@ class State:
             self.data = {}
         self.data.setdefault("synced", {})
         self.data.setdefault("rejected_names", [])
+        self.data.setdefault("unmapped_notified", [])
 
     @property
     def rejected_names(self) -> set[str]:
@@ -24,6 +25,14 @@ class State:
 
     def add_rejected(self, names: set[str]) -> None:
         self.data["rejected_names"] = sorted(self.rejected_names | names)
+
+    @property
+    def unmapped_notified(self) -> set[str]:
+        """Unmapped Boostcamp names already sent as a notification."""
+        return set(self.data["unmapped_notified"])
+
+    def add_unmapped_notified(self, names: set[str]) -> None:
+        self.data["unmapped_notified"] = sorted(self.unmapped_notified | names)
 
     def is_current(self, workout_key: str, activity_id: int, content_hash: str) -> bool:
         rec = self.data["synced"].get(workout_key)
