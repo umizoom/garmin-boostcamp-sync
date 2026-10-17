@@ -12,6 +12,7 @@ from typing import Any
 
 from garminconnect import Garmin, GarminConnectAuthenticationError, GarminConnectConnectionError
 
+from . import notify
 from .config import Config
 from .models import GarminActivity
 
@@ -97,6 +98,11 @@ def login_with_mfa_file(cfg: Config) -> Garmin:
             cfg.mfa_wait_minutes,
             cfg.mfa_code_path,
         )
+        notify.send(
+            cfg,
+            f"Garmin needs an MFA code: `echo 123456 > {cfg.mfa_code_path}` "
+            f"within {cfg.mfa_wait_minutes} minutes",
+        )
         deadline = time.monotonic() + cfg.mfa_wait_minutes * 60
         try:
             while True:
@@ -107,6 +113,7 @@ def login_with_mfa_file(cfg: Config) -> Garmin:
                 except GarminConnectAuthenticationError as e:
                     # A wrong code keeps the pending MFA session; wait for another.
                     log.warning("MFA code rejected (%s); write a new one to %s", e, cfg.mfa_code_path)
+                    notify.send(cfg, f"Garmin rejected the MFA code; write a new one to {cfg.mfa_code_path}")
         finally:
             cfg.mfa_pending_path.unlink(missing_ok=True)
 

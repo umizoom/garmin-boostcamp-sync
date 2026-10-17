@@ -270,3 +270,68 @@ def test_rename_activities_default_and_overrides(tmp_path, monkeypatch):
 
     monkeypatch.setenv("GBSYNC_RENAME_ACTIVITIES", "true")
     assert load_config(cfg_file).rename_activities is True
+
+
+# --- notifications ----------------------------------------------------------
+
+def _cfg(tmp_path, webhook):
+    from gbsync.config import load_config
+
+    cfg_file = tmp_path / "credentials.toml"
+    body = f'[sync]\ndata_dir = "{tmp_path / "data"}"\n'
+    if webhook:
+        body += f'[notify]\ndiscord_webhook = "{webhook}"\n'
+    cfg_file.write_text(body)
+    return load_config(cfg_file)
+
+
+def test_discord_webhook_from_toml_and_env(tmp_path, monkeypatch):
+    monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
+    assert _cfg(tmp_path, None).discord_webhook is None
+    assert _cfg(tmp_path, "https://example.test/a").discord_webhook == "https://example.test/a"
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://example.test/b")
+    assert _cfg(tmp_path, "https://example.test/a").discord_webhook == "https://example.test/b"
+
+
+def test_notify_posts_and_never_raises(tmp_path, monkeypatch):
+    import json
+    import urllib.request
+
+    from gbsync import notify
+
+    monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
+    sent = []
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout):
+        sent.append(req)
+        return _Resp()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    notify.send(_cfg(tmp_path, None), "hi")
+    assert sent == []
+
+    notify.send(_cfg(tmp_path, "https://example.test/hook"), "hi")
+    (req,) = sent
+    assert req.full_url == "https://example.test/hook"
+    assert json.loads(req.data) == {"content": "gbsync: hi"}
+
+    def broken(req, timeout):
+        raise OSError("down")
+
+    monkeypatch.setattr(urllib.request, "urlopen", broken)
+    notify.send(_cfg(tmp_path, "https://example.test/hook"), "hi")  # logged, not raised
+
+
+def test_state_unmapped_notified_roundtrip(tmp_path):
+    s = State(tmp_path / "state.json")
+    s.add_unmapped_notified({"Dead Hang"})
+    s.save()
+    s2 = State(tmp_path / "state.json")
+    assert {"Dead Hang", "Plank"} - s2.unmapped_notified == {"Plank"}
