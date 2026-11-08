@@ -87,6 +87,24 @@ docker compose logs -f
 
 To update: `docker compose pull && docker compose up -d`.
 
+## Deploy (Kubernetes)
+
+Production runs in the home cluster. The manifests live in the `homek8s` repo
+under `apps/production/garmin-boostcamp-sync/` and are applied by Flux.
+
+- No `credentials.toml` is mounted. The logins and Discord webhook come from
+  Bitwarden through an ExternalSecret as env vars (`GARMIN_EMAIL`,
+  `GARMIN_PASSWORD`, `BOOSTCAMP_EMAIL`, `BOOSTCAMP_PASSWORD`,
+  `DISCORD_WEBHOOK_URL`). The timezone is set with `GBSYNC_TIMEZONE`.
+- `data/` (tokens, session, state, backups) is the PVC
+  `garmin-boostcamp-sync-data`, mounted at `/app/data`.
+
+```sh
+kubectl logs -f deploy/garmin-boostcamp-sync
+kubectl exec deploy/garmin-boostcamp-sync -- sh -c 'echo 123456 > /app/data/mfa_code'   # MFA
+kubectl exec deploy/garmin-boostcamp-sync -- gbsync sync --dry-run --since 14
+```
+
 ## Exercise mapping
 
 Garmin only accepts exercise names from its own catalog. Names are resolved in
